@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.exc import IntegrityError, OperationalError
 import streamlit as st
 from PIL import Image as PILImage
+import pillow_heif
 import os
 import random
 import sys
@@ -239,23 +240,22 @@ else:
             try:
                 # Display the uploaded file information
                 st.write(f"アップロードされたファイル: {uploaded_file.name}")
+                # HEICサポートを追加
+                pillow_heif.register_heif_opener()
+
                 file_name = uploaded_file.name.lower()
 
+                # ファイルがHEIC形式であるかどうかをチェック
                 if file_name.endswith('.heic'):
-                    uploaded_file = uploaded_file.read()  # ファイルをバイナリモードで読み取る
-                    heif_file = iio.imread(io.BytesIO(uploaded_file), plugin="pillow")
-                    img = PILImage.fromarray(heif_file)
-                    
-                    # JPEGに変換
-                    with io.BytesIO() as output:
-                        img.save(output, format="JPEG")
-                        jpeg_image = output.getvalue()
-                        uploaded_file = io.BytesIO(jpeg_image)  # JPEG画像のバイトデータをBytesIOオブジェクトに変換
-                        uploaded_file.name = file_name.replace('.heic', '.jpg')  # 新しいファイル名を設定
-
-
-                img = PILImage.open(uploaded_file)
-
+                    # ファイルをバイナリモードで読み取り、BytesIOオブジェクトに変換
+                    uploaded_file_bytes = uploaded_file.read()
+                    byte_stream = io.BytesIO(uploaded_file_bytes)
+                    img = PILImage.open(byte_stream)
+                else:
+                    # 他の形式の場合もバイナリモードで読み取り、BytesIOオブジェクトに変換
+                    uploaded_file_bytes = uploaded_file.read()
+                    byte_stream = io.BytesIO(uploaded_file_bytes)
+                    img = PILImage.open(byte_stream)
                 user_upload_dir = os.path.join(UPLOAD_DIR, user.username)
                 if not os.path.exists(user_upload_dir):
                     os.makedirs(user_upload_dir)

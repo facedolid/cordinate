@@ -3,4 +3,4 @@ sqlalchemy
 pillow
 bcrypt
 imageio
-Pillow
+pillow_heif
