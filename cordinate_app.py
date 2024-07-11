@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.exc import IntegrityError, OperationalError
 import streamlit as st
 from PIL import Image as PILImage
+import pillow_heif
 import os
 import random
 import sys

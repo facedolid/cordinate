@@ -1,5 +1,7 @@
 streamlit
-Pillow
-SQLAlchemy
+sqlalchemy
+pillow
 bcrypt
-imageio
+pillow_heif
+imageio[ffmpeg]
+imageio-heif
