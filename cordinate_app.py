@@ -1,12 +1,13 @@
+import bcrypt
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy.exc import IntegrityError, OperationalError
 import streamlit as st
 from PIL import Image as PILImage
 import os
 import random
 import sys
 import pillow_heif
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base
-from sqlalchemy.exc import IntegrityError, OperationalError
 import shutil
 import zipfile
 
@@ -77,12 +78,21 @@ if "favorite_button_clicked" not in st.session_state:
 if "logged_in_user" not in st.session_state:
     st.session_state["logged_in_user"] = None
 
+def hash_password(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def check_password(hashed_password, plain_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
 def authenticate(username, password):
-    user = session.query(User).filter_by(username=username, password=password).first()
-    return user
+    user = session.query(User).filter_by(username=username).first()
+    if user and check_password(user.password, password):
+        return user
+    return None
 
 def register(username, password):
-    new_user = User(username=username, password=password)
+    hashed_password = hash_password(password)
+    new_user = User(username=username, password=hashed_password)
     try:
         session.add(new_user)
         session.commit()
@@ -145,6 +155,17 @@ def restore_backup(backup_file):
 
         # Clean up the temporary directory
         shutil.rmtree(temp_dir)
+
+def hash_existing_passwords():
+    users = session.query(User).all()
+    for user in users:
+        if not user.password.startswith('$2b$'):
+            hashed_password = hash_password(user.password)
+            user.password = hashed_password
+    session.commit()
+
+# Hash existing passwords
+hash_existing_passwords()
 
 # Streamlit app
 st.title('ファッション提案アプリ')
