@@ -6,7 +6,9 @@ import sys
 import pillow_heif
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
+import shutil
+import zipfile
 
 # Increase recursion limit
 sys.setrecursionlimit(5000)
@@ -57,10 +59,13 @@ Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 session = Session()
 
-# Directory for uploaded images
+# Directory for uploaded images and backups
 UPLOAD_DIR = 'uploads'
+BACKUP_DIR = 'backups'
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
+if not os.path.exists(BACKUP_DIR):
+    os.makedirs(BACKUP_DIR)
 
 # Initialize session state for buttons
 if "dislike_button_clicked" not in st.session_state:
@@ -86,6 +91,61 @@ def register(username, password):
         session.rollback()
         return None
 
+def create_backup():
+    backup_file = os.path.join(BACKUP_DIR, 'fashion_backup.zip')
+    with zipfile.ZipFile(backup_file, 'w') as zipf:
+        # Add database file to the zip
+        zipf.write('fashion.db', os.path.basename('fashion.db'))
+        # Add user-specific uploaded images to the zip
+        for root, dirs, files in os.walk(UPLOAD_DIR):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, UPLOAD_DIR)
+                zipf.write(file_path, arcname)
+    return backup_file
+
+def restore_backup(backup_file):
+    with zipfile.ZipFile(backup_file, 'r') as zipf:
+        # Extract all files in the ZIP to a temporary directory
+        temp_dir = os.path.join(BACKUP_DIR, 'temp_restore')
+        zipf.extractall(temp_dir)
+        
+        # Print the contents of the temporary directory for debugging
+        for root, dirs, files in os.walk(temp_dir):
+            print("Root:", root)
+            print("Directories:", dirs)
+            print("Files:", files)
+        
+        # Move the extracted database file to the current directory
+        db_path = os.path.join(temp_dir, 'fashion.db')
+        if os.path.exists(db_path):
+            shutil.move(db_path, 'fashion.db')
+
+        # Process the extracted uploads directory
+        for user_dir in os.listdir(temp_dir):
+            user_dir_path = os.path.join(temp_dir, user_dir)
+            if os.path.isdir(user_dir_path) and user_dir != 'fashion.db':
+                user_upload_dir = os.path.join(UPLOAD_DIR, user_dir)
+                if not os.path.exists(user_upload_dir):
+                    os.makedirs(user_upload_dir)
+                for root, dirs, files in os.walk(user_dir_path):
+                    for file_ in files:
+                        # Source file path
+                        src_file = os.path.join(root, file_)
+                        # Relative path from the extracted user directory
+                        relative_path = os.path.relpath(src_file, user_dir_path)
+                        # Destination file path
+                        dst_file = os.path.join(user_upload_dir, relative_path)
+                        # Create the destination directory if it doesn't exist
+                        dst_dir = os.path.dirname(dst_file)
+                        if not os.path.exists(dst_dir):
+                            os.makedirs(dst_dir)
+                        # Copy the file
+                        shutil.copy2(src_file, dst_file)
+
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+
 # Streamlit app
 st.title('ファッション提案アプリ')
 
@@ -98,7 +158,7 @@ if st.session_state["logged_in_user"] is None:
         if user:
             st.session_state["logged_in_user"] = user
             st.success("ログイン成功")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("ログイン失敗")
     
@@ -116,16 +176,16 @@ else:
     st.sidebar.text(f"ログイン中: {user.username}")
     if st.sidebar.button("ログアウト"):
         st.session_state["logged_in_user"] = None
-        st.experimental_rerun()
+        st.rerun()
 
     # Page navigation
-    page = st.sidebar.selectbox('ページを選択', ['画像をアップロード', 'コーディネート提案', 'お気に入りの編集', '嫌いな組み合わせの編集'])
+    page = st.sidebar.selectbox('ページを選択', ['画像をアップロード', 'コーディネート提案', 'お気に入りの編集', '嫌いな組み合わせの編集', 'データベースバックアップ'])
 
     def load_images_from_directory():
         """
         Load images from the upload directory into the database if not already present.
         """
-        user_upload_dir = os.path.join(UPLOAD_DIR, str(user.id))
+        user_upload_dir = os.path.join(UPLOAD_DIR, user.username)
         if not os.path.exists(user_upload_dir):
             os.makedirs(user_upload_dir)
         
@@ -171,7 +231,7 @@ else:
                 else:
                     img = PILImage.open(uploaded_file)
 
-                user_upload_dir = os.path.join(UPLOAD_DIR, str(user.id))
+                user_upload_dir = os.path.join(UPLOAD_DIR, user.username)
                 if not os.path.exists(user_upload_dir):
                     os.makedirs(user_upload_dir)
 
@@ -189,7 +249,12 @@ else:
 
         # Uploaded images
         st.header('アップロードされた画像')
-        images = session.query(Image).filter_by(user_id=user.id).all()
+        try:
+            images = session.query(Image).filter_by(user_id=user.id).all()
+            st.write(f"デバッグ情報: 画像の数: {len(images)}")
+        except Exception as e:
+            st.error(f"データベースクエリエラー: {e}")
+
         for image in images:
             try:
                 st.image(image.path, caption=f"{image.category} (ID: {image.id})", width=150)
@@ -203,7 +268,7 @@ else:
                     session.delete(image)
                     session.commit()
                     st.success(f"画像 {image.id} を削除しました")
-                    st.experimental_rerun()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"画像の削除エラー: {e}")
 
@@ -289,7 +354,7 @@ else:
                         session.commit()
                         st.success("組み合わせが嫌いとして記録されました。今後この組み合わせは提案されません。")
                         st.session_state["dislike_button_clicked"] = False
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         st.error(f"嫌いな組み合わせの保存エラー: {e}")
                 else:
@@ -324,7 +389,11 @@ else:
 
     elif page == '嫌いな組み合わせの編集':
         st.header('嫌いな組み合わせ')
-        disliked_combinations = session.query(Dislike).filter_by(user_id=user.id).all()
+        try:
+            disliked_combinations = session.query(Dislike).filter_by(user_id=user.id).all()
+            st.write(f"デバッグ情報: 嫌いな組み合わせの数: {len(disliked_combinations)}")
+        except Exception as e:
+            st.error(f"データベースクエリエラー: {e}")
 
         for dislike in disliked_combinations:
             top_img = session.query(Image).filter_by(id=dislike.top_id).first()
@@ -347,11 +416,15 @@ else:
                 session.delete(dislike)
                 session.commit()
                 st.success(f'嫌い {dislike.id} を解除しました')
-                st.experimental_rerun()
+                st.rerun()
 
     elif page == 'お気に入りの編集':
         st.header('好きな組み合わせ')
-        favorite_combinations = session.query(Favorite).filter_by(user_id=user.id).all()
+        try:
+            favorite_combinations = session.query(Favorite).filter_by(user_id=user.id).all()
+            st.write(f"デバッグ情報: 好きな組み合わせの数: {len(favorite_combinations)}")
+        except Exception as e:
+            st.error(f"データベースクエリエラー: {e}")
 
         for favorite in favorite_combinations:
             top_img = session.query(Image).filter_by(id=favorite.top_id).first()
@@ -374,7 +447,27 @@ else:
                 session.delete(favorite)
                 session.commit()
                 st.success(f'好き {favorite.id} を解除しました')
-                st.experimental_rerun()
+                st.rerun()
+
+    elif page == 'データベースバックアップ':
+        st.header('データベースバックアップ')
+        if st.button('バックアップを作成'):
+            backup_file = create_backup()
+            st.success("バックアップが作成されました。")
+            with open(backup_file, 'rb') as f:
+                st.download_button(label="バックアップをダウンロード", data=f, file_name='fashion_backup.zip')
+
+        st.header('バックアップの復元')
+        uploaded_backup = st.file_uploader("バックアップZIPファイルを選択...", type=["zip"])
+        if uploaded_backup is not None:
+            backup_path = os.path.join(BACKUP_DIR, uploaded_backup.name)
+            with open(backup_path, 'wb') as f:
+                f.write(uploaded_backup.getbuffer())
+            try:
+                restore_backup(backup_path)
+                st.success("バックアップが正常に復元されました。")
+            except Exception as e:
+                st.error(f"バックアップの復元エラー: {e}")
 
     # Load images from directory into the database (if not already present)
     load_images_from_directory()
