@@ -9,7 +9,7 @@ import random
 import sys
 import shutil
 import zipfile
-import imageio.v2 as imageio
+import imageio.v3 as iio  # imageio の v3 を使用
 
 # Increase recursion limit
 sys.setrecursionlimit(5000)
@@ -238,9 +238,8 @@ else:
             try:
                 # Display the uploaded file information
                 st.write(f"アップロードされたファイル: {uploaded_file.name}")
-
                 if uploaded_file.name.lower().endswith('.heic'):
-                    heif_file = imageio.imread(uploaded_file)
+                    heif_file = iio.imread(uploaded_file, plugin="pillow")
                     img = PILImage.fromarray(heif_file)
                 else:
                     img = PILImage.open(uploaded_file)
