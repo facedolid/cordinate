@@ -11,6 +11,7 @@ import sys
 import shutil
 import zipfile
 import imageio.v3 as iio  # imageio の v3 を使用
+import io
 
 # Increase recursion limit
 sys.setrecursionlimit(5000)
@@ -239,11 +240,22 @@ else:
             try:
                 # Display the uploaded file information
                 st.write(f"アップロードされたファイル: {uploaded_file.name}")
-                if uploaded_file.name.lower().endswith('.heic'):
-                    heif_file = iio.imread(uploaded_file, plugin="pillow")
+                file_name = uploaded_file.name.lower()
+
+                if file_name.endswith('.heic'):
+                    uploaded_file = uploaded_file.read()  # ファイルをバイナリモードで読み取る
+                    heif_file = iio.imread(io.BytesIO(uploaded_file), plugin="pillow")
                     img = PILImage.fromarray(heif_file)
-                else:
-                    img = PILImage.open(uploaded_file)
+                    
+                    # JPEGに変換
+                    with io.BytesIO() as output:
+                        img.save(output, format="JPEG")
+                        jpeg_image = output.getvalue()
+                        uploaded_file = io.BytesIO(jpeg_image)  # JPEG画像のバイトデータをBytesIOオブジェクトに変換
+                        uploaded_file.name = file_name.replace('.heic', '.jpg')  # 新しいファイル名を設定
+
+
+                img = PILImage.open(uploaded_file)
 
                 user_upload_dir = os.path.join(UPLOAD_DIR, user.username)
                 if not os.path.exists(user_upload_dir):
