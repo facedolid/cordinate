@@ -7,9 +7,9 @@ from PIL import Image as PILImage
 import os
 import random
 import sys
-import pillow_heif
 import shutil
 import zipfile
+import imageio.v2 as imageio
 
 # Increase recursion limit
 sys.setrecursionlimit(5000)
@@ -239,16 +239,9 @@ else:
                 # Display the uploaded file information
                 st.write(f"アップロードされたファイル: {uploaded_file.name}")
 
-                # HEICファイルを読み込む
-                if uploaded_file.type == "image/heic":
-                    heif_file = pillow_heif.open_heif(uploaded_file)
-                    img = PILImage.frombytes(
-                        heif_file.mode, 
-                        heif_file.size, 
-                        heif_file.data, 
-                        "raw", 
-                        heif_file.mode
-                    )
+                if uploaded_file.name.lower().endswith('.heic'):
+                    heif_file = imageio.imread(uploaded_file)
+                    img = PILImage.fromarray(heif_file)
                 else:
                     img = PILImage.open(uploaded_file)
 
@@ -257,7 +250,7 @@ else:
                     os.makedirs(user_upload_dir)
 
                 file_path = os.path.join(user_upload_dir, uploaded_file.name)
-                
+
                 # Save the uploaded file to the server
                 img.save(file_path)
                 new_image = Image(category=category.lower(), path=file_path, user_id=user.id)
