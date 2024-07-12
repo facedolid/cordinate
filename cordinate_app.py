@@ -210,7 +210,7 @@ def login_page():
         if user:
             st.session_state["logged_in_user"] = user
             st.success("ログイン成功")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("ログイン失敗")
     
@@ -229,7 +229,7 @@ def logged_in_page():
     st.sidebar.text(f"ログイン中: {user.username}")
     if st.sidebar.button("ログアウト"):
         st.session_state["logged_in_user"] = None
-        st.experimental_rerun()
+        st.rerun()
 
     page = st.sidebar.selectbox('ページを選択', ['画像をアップロード', 'コーディネート提案', 'お気に入りの編集', '嫌いな組み合わせの編集', 'データベースバックアップ'])
 
@@ -285,7 +285,7 @@ def display_uploaded_images(user):
                 st.image(image.path, caption=f"{image.category} (ID: {image.id})", width=150)
                 if st.button(f'削除 {image.id}', key=f'delete_{image.id}'):
                     delete_image(image)
-                    st.experimental_rerun()
+                    st.rerun()
             except Exception as e:
                 st.error(f"画像の読み込みエラー: {e}")
     except Exception as e:
@@ -356,7 +356,7 @@ def handle_dislike(user):
                 session.commit()
                 st.success("組み合わせが嫌いとして記録されました。今後この組み合わせは提案されません。")
                 st.session_state["dislike_button_clicked"] = False
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"嫌いな組み合わせの保存エラー: {e}")
         else:
@@ -397,7 +397,7 @@ def dislike_page(user):
                 session.delete(dislike)
                 session.commit()
                 st.success(f'嫌い {dislike.id} を解除しました')
-                st.experimental_rerun()
+                st.rerun()
     except Exception as e:
         st.error(f"データベースクエリエラー: {e}")
 
@@ -411,7 +411,7 @@ def favorite_page(user):
                 session.delete(favorite)
                 session.commit()
                 st.success(f'好き {favorite.id} を解除しました')
-                st.experimental_rerun()
+                st.rerun()
     except Exception as e:
         st.error(f"データベースクエリエラー: {e}")
 
